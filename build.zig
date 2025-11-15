@@ -3,50 +3,45 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-
-    const utils_mod = b.addModule("utils", .{
+    const utils_mod = b.createModule(.{
         .root_source_file = b.path("src/utils/strings.zig"),
     });
-
+    const command_mod = b.createModule(.{
+        .root_source_file = b.path("src/command/command.zig"),
+    });
     const exe = b.addExecutable(.{
         .name = "shell_zig",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
-            .imports = &.{},
+            .imports = &.{
+                .{ .name = "utils", .module = utils_mod },
+                .{ .name = "command", .module = command_mod },
+            },
         }),
     });
-
     b.installArtifact(exe);
-
     const run_step = b.step("run", "Run the app");
-
     const run_cmd = b.addRunArtifact(exe);
     run_step.dependOn(&run_cmd.step);
-
     run_cmd.step.dependOn(b.getInstallStep());
-
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
-
     const exe_tests = b.addTest(.{
         .root_module = exe.root_module,
     });
-
     const command_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/command/command.zig"),
             .target = target,
             .optimize = optimize,
-            .imports = &.{},
+            .imports = &.{.{ .name = "utils", .module = utils_mod }},
         }),
     });
-
     const run_exe_tests = b.addRunArtifact(exe_tests);
     const run_command_tests = b.addRunArtifact(command_tests);
-
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_exe_tests.step);
     test_step.dependOn(&run_command_tests.step);
