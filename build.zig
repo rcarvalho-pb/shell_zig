@@ -8,6 +8,7 @@ pub fn build(b: *std.Build) void {
     });
     const command_mod = b.createModule(.{
         .root_source_file = b.path("src/command/command.zig"),
+        .imports = &.{.{ .name = "utils", .module = utils_mod }},
     });
     const exe = b.addExecutable(.{
         .name = "shell_zig",

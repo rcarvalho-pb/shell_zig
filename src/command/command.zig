@@ -2,8 +2,8 @@ const std = @import("std");
 const testing = std.testing;
 const print = std.debug.print;
 const toUpper = @import("utils").toUpper;
-const CommandType = enum { NOT_FOUND, CD, PWD, TYPE, ECHO, EXIT };
-const Command = struct {
+pub const CommandType = enum { NOT_FOUND, CD, PWD, TYPE, ECHO, EXIT };
+pub const Command = struct {
     allocator: std.mem.Allocator,
     type: CommandType,
     rawArguments: ?[][]const u8,
@@ -15,7 +15,11 @@ const Command = struct {
     }
     pub fn getArguments(self: Self) ?[][]const u8 {
         if (self.rawArguments) |args| {
-            return args[1..];
+            if (args.len > 1) {
+                return args[1..];
+            } else {
+                return null;
+            }
         }
         return null;
     }
@@ -25,11 +29,14 @@ const Command = struct {
             for (args, 0..) |arg, i| {
                 print("\t{d} - {s}\n", .{ i, arg });
             }
+        } else {
+            print("\tno args\n", .{});
         }
     }
 };
 pub fn parseCommand(allocator: std.mem.Allocator, rawInput: []const u8) !Command {
     if (rawInput.len < 1) return error.InvalidParseInput;
+    if (std.mem.eql(u8, " ", rawInput)) return error.InvalidParseInput;
     const input = std.mem.trim(u8, rawInput, " ");
     var list = std.ArrayList([]const u8){};
     defer list.deinit(allocator);
