@@ -35,7 +35,7 @@ pub fn main() !void {
                 // .TYPE => try handleType(command),
                 .PWD => handlePWD(command),
                 .ECHO => handleEcho(command),
-                // .CD => try handleCD(command),
+                .CD => handleCD(command),
                 else => {},
             }
         }
@@ -84,7 +84,71 @@ fn handleEcho(command: Command.Command) void {
         }
     }
 }
-// fn handleCD(command: Command.Command) !void {}
+fn handleCD(command: Command.Command) void {
+    const writer = command.writer orelse {
+        print("writer not found\n", .{});
+        return;
+    };
+
+    const args_opt = command.getArguments() orelse {
+        writer.print("cd: missing argument\n", .{}) catch {};
+        return;
+    };
+
+    const args = args_opt;
+    if (args.len > 1) {
+        writer.print("cd: too many arguments\n", .{}) catch {};
+        return;
+    }
+
+    const arg = args[0];
+
+    if (arg.len > 0 and arg[0] == '~') {
+        var env = std.process.getEnvMap(command.allocator) catch {
+            writer.print("cd: error reading environment\n", .{}) catch {};
+            return;
+        };
+        defer env.deinit();
+
+        const os = @import("builtin").os.tag;
+
+        const home_env_var = if (os == .windows) "USERPROFILE" else "HOME";
+
+        const home = env.get(home_env_var) orelse env.get("HOMEPATH") orelse {
+            writer.print("cd: HOME not set\n", .{}) catch {};
+            return;
+        };
+
+        const rest = if (arg.len > 1) arg[1..] else "";
+
+        const full_path = std.fs.path.join(command.allocator, &[_][]const u8{ home, rest });
+        if (full_path) |p| {
+            defer command.allocator.free(p);
+            changeDir(writer, p);
+            return;
+        } else |err| {
+            print("err: {any}\n", .{err});
+            writer.print("cd: {s}: No such file or directory\n", .{arg}) catch {};
+            return;
+        }
+    }
+    changeDir(writer, arg);
+}
+
+fn changeDir(writer: *std.io.Writer, path: []const u8) void {
+    const dir = std.fs.cwd().openDir(path, .{});
+    if (dir) |d| {
+        d.setAsCwd() catch {
+            writer.print("cd: error setting cwd\n", .{}) catch {};
+            return;
+        };
+    } else |err| {
+        print("err: {any}\n", .{err});
+        writer.print("cd: {s}: No such file or directory\n", .{path}) catch {
+            return;
+        };
+    }
+}
 
 fn locateExecutable(allocator: std.mem.Allocator, executable: []const u8) !?[]const u8 {
     var envMap = try std.process.getEnvMap(allocator);
