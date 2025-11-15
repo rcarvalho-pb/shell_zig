@@ -2,6 +2,7 @@ const std = @import("std");
 const print = std.debug.print;
 
 const Command = @import("command");
+const utils = @import("utils");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -32,7 +33,7 @@ pub fn main() !void {
             switch (command.type) {
                 // .NOT_FOUND => try handleNotFound(command),
                 .EXIT => handleExit(command),
-                // .TYPE => try handleType(command),
+                .TYPE => handleType(command),
                 .PWD => handlePWD(command),
                 .ECHO => handleEcho(command),
                 .CD => handleCD(command),
@@ -60,7 +61,43 @@ fn handleExit(command: Command.Command) void {
         print("invalid arguments\n", .{});
     }
 }
-// fn handleType(command: Command.Command) !void {}
+
+fn handleType(command: Command.Command) void {
+    const writer = command.writer orelse {
+        print("type: writer not found\n", .{});
+        return;
+    };
+    const arguments = command.getArguments() orelse {
+        writer.print("type: arguments not found\n", .{}) catch {};
+        return;
+    };
+
+    for (arguments, 1..) |arg, i| {
+        const upperCommand = utils.toUpper(command.allocator, arg) catch "";
+        defer command.allocator.free(upperCommand);
+        const c = std.meta.stringToEnum(Command.CommandType, upperCommand) orelse .NOT_FOUND;
+        if (c != .NOT_FOUND) {
+            writer.print("{s} is a shell builtin", .{arg}) catch {};
+        } else {
+            const executable = locateExecutable(command.allocator, arg);
+            if (executable) |exec| {
+                if (exec) |e| {
+                    writer.print("{s} is shell builtin", .{e}) catch {};
+                } else {
+                    writer.print("{s}: not found", .{arg}) catch {};
+                }
+            } else |err| {
+                print("type: err {any}", .{err});
+            }
+        }
+        if (i < arguments.len) {
+            writer.print(" ", .{}) catch {};
+        } else {
+            writer.print("\n", .{}) catch {};
+        }
+    }
+}
+
 fn handlePWD(command: Command.Command) void {
     const cwd = std.process.getCwdAlloc(command.allocator) catch {
         print("error getting pwd\n", .{});
@@ -91,7 +128,12 @@ fn handleCD(command: Command.Command) void {
     };
 
     const args_opt = command.getArguments() orelse {
-        writer.print("cd: missing argument\n", .{}) catch {};
+        const home = getHomeDir(command.allocator) orelse {
+            writer.print("cd: error getting home dir\n", .{}) catch {};
+            return;
+        };
+        defer command.allocator.free(home);
+        changeDir(writer, home);
         return;
     };
 
@@ -104,18 +146,8 @@ fn handleCD(command: Command.Command) void {
     const arg = args[0];
 
     if (arg.len > 0 and arg[0] == '~') {
-        var env = std.process.getEnvMap(command.allocator) catch {
-            writer.print("cd: error reading environment\n", .{}) catch {};
-            return;
-        };
-        defer env.deinit();
-
-        const os = @import("builtin").os.tag;
-
-        const home_env_var = if (os == .windows) "USERPROFILE" else "HOME";
-
-        const home = env.get(home_env_var) orelse env.get("HOMEPATH") orelse {
-            writer.print("cd: HOME not set\n", .{}) catch {};
+        const home = getHomeDir(command.allocator) orelse {
+            writer.print("cd: error getting home dir\n", .{}) catch {};
             return;
         };
 
@@ -127,12 +159,12 @@ fn handleCD(command: Command.Command) void {
             changeDir(writer, p);
             return;
         } else |err| {
+            command.allocator.free(home);
             print("err: {any}\n", .{err});
             writer.print("cd: {s}: No such file or directory\n", .{arg}) catch {};
             return;
         }
     }
-    changeDir(writer, arg);
 }
 
 fn changeDir(writer: *std.io.Writer, path: []const u8) void {
@@ -172,4 +204,29 @@ fn locateExecutable(allocator: std.mem.Allocator, executable: []const u8) !?[]co
         }
     }
     return null;
+}
+
+fn getHomeDir(allocator: std.mem.Allocator) ?[]const u8 {
+    var env = std.process.getEnvMap(allocator) catch {
+        print("cd: error reading environment\n", .{});
+        return null;
+    };
+    defer env.deinit();
+
+    const os = @import("builtin").os.tag;
+
+    const home_env_var = if (os == .windows) "USERPROFILE" else "HOME";
+
+    const home = env.get(home_env_var) orelse env.get("HOMEPATH") orelse {
+        print("cd: HOME not set\n", .{});
+        return null;
+    };
+
+    const allocated = allocator.dupe(u8, home);
+    if (allocated) |h| {
+        return h;
+    } else |err| {
+        print("{any}\n", .{err});
+        return null;
+    }
 }
