@@ -27,12 +27,13 @@ pub fn main() !void {
                 print("invalid command. error: {any}\n", .{err});
                 continue;
             };
+            command.writer = stdout;
             defer command.deinit();
             switch (command.type) {
                 // .NOT_FOUND => try handleNotFound(command),
                 .EXIT => handleExit(command),
                 // .TYPE => try handleType(command),
-                // .PWD => try handlePWD(command),
+                .PWD => handlePWD(command),
                 .ECHO => handleEcho(command),
                 // .CD => try handleCD(command),
                 else => {},
@@ -60,7 +61,17 @@ fn handleExit(command: Command.Command) void {
     }
 }
 // fn handleType(command: Command.Command) !void {}
-// fn handlePWD(command: Command.Command) !void {}
+fn handlePWD(command: Command.Command) void {
+    const cwd = std.process.getCwdAlloc(command.allocator) catch {
+        print("error getting pwd\n", .{});
+        return;
+    };
+    defer command.allocator.free(cwd);
+    command.writer.?.print("{s}\n", .{cwd}) catch {
+        print("error finding pwd\n", .{});
+    };
+}
+
 fn handleEcho(command: Command.Command) void {
     if (command.getArguments()) |args| {
         for (args, 1..) |arg, i| {

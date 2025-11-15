@@ -7,6 +7,7 @@ pub const Command = struct {
     allocator: std.mem.Allocator,
     type: CommandType,
     rawArguments: ?[][]const u8,
+    writer: ?*std.io.Writer = null,
     const Self = @This();
     pub fn deinit(self: *Self) void {
         if (self.rawArguments) |args| {
