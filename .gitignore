@@ -1,2 +1,12 @@
-.zig-cache/*
-zig-out/*
+*.o
+*.exe
+*.dll
+
+build/
+.zig-cache/
+zig-out/
+
+.env
+*.local
+
+*.log

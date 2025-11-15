@@ -82,7 +82,7 @@ fn handleType(command: Command.Command) void {
             const executable = locateExecutable(command.allocator, arg);
             if (executable) |exec| {
                 if (exec) |e| {
-                    writer.print("{s} is shell builtin", .{e}) catch {};
+                    writer.print("{s} is {s}\n", .{ arg, e }) catch {};
                 } else {
                     writer.print("{s}: not found", .{arg}) catch {};
                 }
